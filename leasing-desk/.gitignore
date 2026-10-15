@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+*.log
+_preview.html
+_tk_preview.html
+shot_*.png
+
+# Secrets and generated config (see .env.example and scripts/write-config.mjs)
+.env
+.env.*
+!.env.example
+config.js
+
+# UI audit screenshots + Playwright CLI scratch (never committed)
+audit/
+.playwright-cli/
+
+# Production-only notes, kept locally until Phase 4 folds their facts into the README and decision records
+docs/ORIGINAL_CLAUDE.md
+docs/DEPLOY.md
+docs/SETUP.md

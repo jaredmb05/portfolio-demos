@@ -1,0 +1,22 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+serviceAccount*.json
+
+# Dependencies and builds
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+
+# Logs and OS files
+*.log
+firebase-debug.log
+.DS_Store
+
+# Private working brief (names target companies); kept local
+docs/PORTFOLIO_BRIEF.md

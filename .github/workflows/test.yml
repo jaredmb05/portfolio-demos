@@ -1,0 +1,28 @@
+# Runs the Leasing Desk unit tests (Vitest) and reports the result. It is not a required check:
+# nothing blocks a merge on it. The browser suites (npm run test:flows, test:demo) need the
+# Playwright CLI and run locally; see leasing-desk/docs/TESTING.md.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: leasing-desk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: leasing-desk/package-lock.json
+      - run: npm ci
+      - run: npm test

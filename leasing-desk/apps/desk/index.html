@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Leasing Desk</title>
+<link rel="icon" type="image/png" href="../tour-companion/icon-192.png">
+<link rel="stylesheet" href="../shared/fonts/fonts.css">
+<script src="../shared/vendor/xlsx.full.min.js"></script>
+<script src="../shared/boot.js"></script><!-- config + Firebase, or the in-browser demo with ?demo -->
+<link rel="stylesheet" href="../shared/tokens.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+  <nav class="tool-nav">
+    <span class="tool-nav-label">Tools</span>
+    <span class="tool-nav-current">Leasing Desk</span>
+  </nav>
+
+  <header>
+    <div class="brand">
+      <div>
+        <h1>Leasing Desk</h1>
+        <span class="tag">Showsheet · Tour Queue · Follow-Ups · Training</span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="tiny" onclick="openTemplateEditor()">Edit email templates</button>
+      <button class="tiny ghost" onclick="startGuidedTour()" id="takeTourBtn" title="Walk me through this tool">Guided tour</button>
+      <button class="tiny ghost" onclick="openHelp()">Help</button>
+    </div>
+  </header>
+
+  <div class="status-strip">
+    <div class="status-card warn" id="ssCard">
+      <div class="status-info">
+        <div class="status-label">Today's Showsheet</div>
+        <div class="status-value" id="ssValue">No showsheet loaded</div>
+        <div class="status-meta" id="ssMeta">Upload the daily Excel file</div>
+        <div class="dbx-line" id="dbxLine"></div>
+      </div>
+      <div class="status-actions">
+        <label class="btn">
+          Upload .xlsx
+          <input type="file" class="file-input" accept=".xlsx,.xls" onchange="handleShowsheet(event)">
+        </label>
+        <button class="dbx-only" id="dbxSyncBtn" onclick="dbxSync(true)" title="Check Dropbox for a newer showsheet / floor plan master now">Sync now</button>
+        <div class="dbx-hint dbx-only" id="dbxHint">Edited a file? Reload it in Dropbox first so it saves, then Sync now.</div>
+        <button class="publish" id="ssPublishBtn" onclick="publishShowsheet()" style="display:none;" title="Push this showsheet + floor plan links to the Tour Companion iPad app">Publish to iPads</button>
+        <button class="ghost" id="ssClearBtn" onclick="clearShowsheet()" style="display:none;">Clear</button>
+      </div>
+    </div>
+    <div class="status-card warn" id="fpCard">
+      <div class="status-info">
+        <div class="status-label">Floor Plan Links</div>
+        <div class="status-value" id="fpValue">Not loaded</div>
+        <div class="status-meta" id="fpMeta">Upload Floor_Plan_Links.xlsx</div>
+        <div class="dbx-line" id="fpDbxNote"></div>
+      </div>
+      <div class="status-actions">
+        <label class="btn">
+          Upload .xlsx
+          <input type="file" class="file-input" accept=".xlsx,.xls" onchange="handleFloorPlanSheet(event)">
+        </label>
+        <button class="ghost" id="fpClearBtn" onclick="clearFloorPlans()" style="display:none;">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="queue open" id="queuePanel">
+    <div class="queue-head" onclick="toggleQueuePanel()">
+      <h2>Tour Queue <span class="meta" id="queueMeta">— connecting…</span></h2>
+      <div class="row" style="gap:12px; align-items:center;">
+        <span class="conn" id="connPill">Connecting…</span>
+        <button class="tiny primary" onclick="event.stopPropagation(); openPlanTour()" title="Enter the prospect's criteria and send a tour to the queue">+ Plan tour</button>
+        <button class="tiny ghost panel-toggle" id="queueToggle" aria-expanded="true" aria-controls="queueBody" onclick="event.stopPropagation(); toggleQueuePanel()">Hide</button>
+      </div>
+    </div>
+    <div class="conn-banner" id="connBanner" role="status" aria-live="polite"></div>
+    <div class="wait-bar" id="waitBar" style="display:none;">
+      <div><div class="wait-label">If someone new walks in now</div><div class="wait-value"><span id="waitValue"></span><span class="wait-asof" id="waitAsOf"></span></div></div>
+    </div>
+    <div class="queue-tabs" id="queueTabs" role="tablist" aria-label="Tour Queue" style="display:none;"></div>
+    <div class="queue-body" id="queueBody"></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Email Builder</h2>
+        <div class="row">
+          <button class="tiny ghost" onclick="resetEmail()">Reset</button>
+        </div>
+      </div>
+      <div class="plan-strip" id="planStrip" style="display:none;">
+        <div><div class="ps-title" id="planStripTitle"></div><div class="ps-sub" id="planStripSub"></div></div>
+        <div class="row" style="gap:6px;">
+          <button class="tiny ps-save" onclick="saveUnitsToTour()">Save units to tour</button>
+          <button class="tiny ghost" onclick="openPlanTour()">Edit details</button>
+          <button class="tiny ghost" onclick="clearActiveTour()">✕</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="emailFields">
+        <div class="mode-switcher row-top">
+          <button class="mode-btn" id="modeTourBtn" onclick="setMode('tour')">
+            <span class="mode-eyebrow">Post-Tour</span>Tour Follow-Up
+          </button>
+          <button class="mode-btn" id="modeInquiryBtn" onclick="setMode('inquiry')">
+            <span class="mode-eyebrow">Pre-Tour</span>Inquiry Follow-Up
+          </button>
+        </div>
+        <div class="mode-switcher row-mid">
+          <button class="mode-btn" id="modeWelcomeBtn" onclick="setMode('welcome')">
+            <span class="mode-eyebrow">New Lease</span>Welcome Email
+          </button>
+          <button class="mode-btn" id="modePfaBtn" onclick="setMode('pfa')">
+            <span class="mode-eyebrow">Lounge Rental</span>PFA
+          </button>
+        </div>
+        <div class="mode-switcher row-bottom">
+          <button class="mode-btn" id="modeAppConfBtn" onclick="setMode('appconf')">
+            <span class="mode-eyebrow">Post-Application</span>Application Confirmation
+          </button>
+          <button class="mode-btn" id="modeApprovalBtn" onclick="setMode('approval')">
+            <span class="mode-eyebrow">Approved</span>Lease Approval
+          </button>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label id="nameFieldLabel">Prospect first name</label>
+            <input type="text" id="prospectName" placeholder="e.g., Medina" oninput="renderPreview()">
+          </div>
+          <div>
+            <label>Greeting</label>
+            <select id="greeting" onchange="renderPreview()">
+              <option value="auto">Auto (by time)</option>
+              <option value="Good morning">Good morning</option>
+              <option value="Good afternoon">Good afternoon</option>
+              <option value="Good evening">Good evening</option>
+              <option value="Hi">Hi</option>
+              <option value="Hello">Hello</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Welcome mode: building dropdown + COI banner + subject line -->
+        <div class="for-welcome">
+          <div class="reminder-banner danger" id="coiBanner">
+            <span class="banner-icon">⚠</span><strong>Attach COI before sending:</strong> <span id="coiFilename">2050 COI</span>
+          </div>
+          <div class="field">
+            <label>Building</label>
+            <select id="welcomeBuilding" onchange="updateWelcomeUi(); renderPreview()">
+              <option value="2040">2040 Tidemark Blvd</option>
+              <option value="2050" selected>2050 Tidemark Blvd</option>
+              <option value="2110">2110 Tidemark Blvd</option>
+              <option value="2120">2120 Tidemark Blvd</option>
+              <option value="2230">2230 Tidemark Blvd</option>
+            </select>
+          </div>
+          <div class="subject-line-card">
+            <div class="subject-info">
+              <div class="subject-label">Email Subject Line</div>
+              <div class="subject-value" id="welcomeSubject">Welcome to 2050!</div>
+            </div>
+            <button class="tiny" onclick="copySubjectLine()">Copy Subject</button>
+          </div>
+        </div>
+
+        <!-- PFA mode: lounge disclaimer banner + sub-mode (info vs signed/payment-due) -->
+        <div class="for-pfa">
+          <div class="pfa-submode">
+            <button class="pfa-submode-btn" id="pfaSubInfoBtn" onclick="setPfaSubMode('info')">
+              <span class="mode-eyebrow">Step 1 · Initial Inquiry</span>Rental Info
+            </button>
+            <button class="pfa-submode-btn" id="pfaSubSignedBtn" onclick="setPfaSubMode('signed')">
+              <span class="mode-eyebrow">Step 2 · Agreement Signed</span>Payment Due (7 days)
+            </button>
+          </div>
+
+          <div id="pfaInfoBlock">
+            <div class="reminder-banner accent">
+              <span class="banner-icon">✦</span><strong>Reminder:</strong> Lounges are only reservable on the <strong>2nd and 4th weekend</strong> of the month. No reservations on 1st, 3rd, or 5th weekends — lounge stays open to all members.
+            </div>
+          </div>
+
+          <div id="pfaSignedBlock" style="display:none;">
+            <div class="reminder-banner danger">
+              <span class="banner-icon">⚠</span><strong>Send only after the PFA is signed.</strong> Checks are due within 7 days of the signing date — the due date below is calculated from the signed date you enter.
+            </div>
+            <div class="field-row">
+              <div>
+                <label>Lounge</label>
+                <select id="pfaLounge" onchange="onPfaLoungeChange()">
+                  <option value="2050">2050 Tidemark Blvd</option>
+                  <option value="2230">2230 Tidemark Blvd</option>
+                </select>
+              </div>
+              <div>
+                <label>Agreement Signed Date</label>
+                <input type="date" id="pfaSignedDate" onchange="renderPreview()">
+              </div>
+            </div>
+            <div class="field-row">
+              <div>
+                <label>Security Deposit ($)</label>
+                <input type="number" id="pfaDeposit" value="400" min="0" step="1" oninput="renderPreview()">
+              </div>
+              <div>
+                <label>Hours Booked <span class="label-hint">(optional — auto-fills fee)</span></label>
+                <input type="number" id="pfaHours" placeholder="2–4" min="0" step="0.5" oninput="onPfaHoursInput()">
+              </div>
+            </div>
+            <div class="field">
+              <label>Rental Fee ($) <span id="pfaRateHint" class="label-hint"></span></label>
+              <input type="number" id="pfaRent" placeholder="e.g., 400" min="0" step="1" oninput="pfaRentManual = true; renderPreview()">
+            </div>
+            <p style="font-size:12px; color:var(--ink-soft); margin:-6px 0 14px; line-height:1.45;">Checks due by: <strong id="pfaDueDateDisplay">—</strong></p>
+          </div>
+        </div>
+
+        <!-- Application Confirmation mode -->
+        <div class="for-appconf">
+          <div class="field">
+            <label>Opening line <span class="label-hint">(editable — "Thank you for applying to Larkspur Residential" is always added)</span></label>
+            <select id="appConfGreetingPreset" onchange="onAppConfGreetingPreset()">
+              <option value="Great meeting you!">Great meeting you! (met with them)</option>
+              <option value="Great meeting you and your guest!">Great meeting you and your guest!</option>
+              <option value="">No opening (didn't meet)</option>
+              <option value="__custom__">Custom…</option>
+            </select>
+            <input type="text" id="appConfGreetingCustom" placeholder="Type a custom opening line" oninput="renderPreview()" style="display:none; margin-top:8px;">
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Building</label>
+              <select id="appConfBuilding" onchange="onAppConfBuildingChange()">
+                <option value="2040 Tidemark Blvd">2040 Tidemark Blvd</option>
+                <option value="2050 Tidemark Blvd">2050 Tidemark Blvd</option>
+                <option value="2110 Tidemark Blvd">2110 Tidemark Blvd</option>
+                <option value="2120 Tidemark Blvd">2120 Tidemark Blvd</option>
+                <option value="2230 Tidemark Blvd">2230 Tidemark Blvd</option>
+              </select>
+            </div>
+            <div>
+              <label>Unit # <span id="appConfUnitPickerHint" class="label-hint"></span></label>
+              <select id="appConfUnitPicker" onchange="onAppConfUnitPick()" style="display:none; margin-bottom:8px;"></select>
+              <input type="text" id="appConfUnit" placeholder="e.g., 3206" oninput="onAppConfUnitInput()">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Rent (monthly)</label>
+              <input type="text" id="appConfRent" placeholder="e.g., 3350" oninput="renderPreview()">
+            </div>
+            <div>
+              <label>Move-in Date</label>
+              <input type="text" id="appConfMoveIn" placeholder="e.g., 01232026 → January 23, 2026" oninput="renderPreview()" onblur="formatAppConfMoveIn()">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Lease Term</label>
+              <select id="appConfLeaseTerm" onchange="renderPreview()">
+                <option value="1 year">1 year</option>
+                <option value="2 years">2 years</option>
+              </select>
+            </div>
+            <div>
+              <label>Hold Deadline</label>
+              <input type="text" id="appConfDeadline" placeholder="e.g., tomorrow 8:00 AM" oninput="renderPreview()">
+            </div>
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="appConfIncentiveToggle" onchange="onAppConfIncentiveToggle(this.checked)"> <span>Include an incentive</span></label>
+            <input type="text" id="appConfIncentive" class="appconf-toggle-input" placeholder='e.g., 1 month free (applied to March 2026)' oninput="renderPreview()" style="display:none;">
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="appConfFloorPlanToggle" onchange="onAppConfFloorPlanToggle(this.checked)"> <span>Include floor plan link</span></label>
+            <input type="text" id="appConfFloorPlan" class="appconf-toggle-input" placeholder="https://…  (auto-fills from floor plan file if unit matches)" oninput="renderPreview()" style="display:none;">
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="appConfStudent" onchange="onAppConfTypeToggle('appConfStudent')"> <span>Applicant is a student</span></label>
+            <p class="appconf-toggle-hint">Swaps income docs for school schedule + I-20, changes Photo ID to Passport, and simplifies Vero step 3.</p>
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="appConfSelfEmployed" onchange="onAppConfTypeToggle('appConfSelfEmployed')"> <span>Applicant is self-employed</span></label>
+            <p class="appconf-toggle-hint">Swaps paystubs for two years of tax returns + CPA letter (or IRS transcripts). Tax years auto-update from today's date: <span id="appConfTaxYearsHint"></span>. Vero step 3 asks them to link the bank account that receives income.</p>
+          </div>
+        </div>
+
+        <!-- Lease Approval mode -->
+        <div class="for-approval">
+          <div class="field-row">
+            <div>
+              <label>Building</label>
+              <select id="apvBuilding" onchange="onApvBuildingChange()">
+                <option value="2040 Tidemark Blvd">2040 Tidemark Blvd</option>
+                <option value="2050 Tidemark Blvd">2050 Tidemark Blvd</option>
+                <option value="2110 Tidemark Blvd">2110 Tidemark Blvd</option>
+                <option value="2120 Tidemark Blvd">2120 Tidemark Blvd</option>
+                <option value="2230 Tidemark Blvd">2230 Tidemark Blvd</option>
+              </select>
+            </div>
+            <div>
+              <label>Unit # <span id="apvUnitPickerHint" class="label-hint"></span></label>
+              <select id="apvUnitPicker" onchange="onApvUnitPick()" style="display:none; margin-bottom:8px;"></select>
+              <input type="text" id="apvUnit" placeholder="e.g., 3206" oninput="onApvUnitInput()">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Monthly Rent</label>
+              <input type="text" id="apvRent" placeholder="e.g., 3350" oninput="onApvRentInput()">
+            </div>
+            <div>
+              <label>Tax Form</label>
+              <select id="apvTaxForm" onchange="renderPreview()">
+                <option value="W-9" selected>W-9</option>
+                <option value="W-8">W-8</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Lease Start Date</label>
+              <input type="text" id="apvLeaseStart" placeholder="e.g., 01232026 → January 23, 2026" oninput="renderPreview()" onblur="formatApvDate('apvLeaseStart')">
+            </div>
+            <div>
+              <label>Lease End Date</label>
+              <input type="text" id="apvLeaseEnd" placeholder="e.g., 01222027 → January 22, 2027" oninput="renderPreview()" onblur="formatApvDate('apvLeaseEnd')">
+            </div>
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvNextRentToggle" onchange="onApvNextRentToggle(this.checked)"> <span>Include next month's rent (pro-rata)</span></label>
+            <p class="appconf-toggle-hint">Computes the pro-rata credit per the rent rider (rent ÷ days in start month × days occupied) and states what's due on the 1st of the following month(s). Concession and credit each get their own month. Adds a line under Initial Rent Payment. Omitted if the lease starts on the 1st and there's no concession or credit.</p>
+            <div id="apvNextRentFields" style="display:none; margin-top:10px;">
+              <div class="field-row">
+                <div>
+                  <label>Concession</label>
+                  <select id="apvConcFrac" onchange="onApvConcFracChange()">
+                    <option value="0" selected>None</option>
+                    <option value="0.25">¼ month free</option>
+                    <option value="0.5">½ month free</option>
+                    <option value="0.75">¾ month free</option>
+                    <option value="1">1 month free</option>
+                    <option value="other">Other (enter $)</option>
+                  </select>
+                  <input type="text" id="apvConcOther" placeholder="e.g., 1500 (free rent amount)" oninput="renderPreview()" style="display:none; margin-top:8px;">
+                </div>
+                <div>
+                  <label>Applied To <span class="label-hint">(auto: 2nd month; 2110 → last month)</span></label>
+                  <select id="apvConcMonth" onchange="apvConcMonthTouched = true; renderPreview()"></select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label>Additional Credit ($)</label>
+                  <input type="text" id="apvCredit" placeholder="e.g., 1000" oninput="renderPreview()">
+                </div>
+                <div>
+                  <label>Credit Applied To <span class="label-hint">(auto: 2nd month)</span></label>
+                  <select id="apvCreditMonth" onchange="apvCreditMonthTouched = true; renderPreview()"></select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div></div>
+                <div>
+                  <label>Pro-rata check <span class="label-hint">(auto)</span></label>
+                  <input type="text" id="apvNextRentCalc" readonly tabindex="-1" style="background:var(--bg-soft); color:var(--ink-soft); cursor:default; font-size:11px;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label>Initial Rent Payment ($) <span class="label-hint">(auto-fills from rent)</span></label>
+              <input type="text" id="apvInitialRent" placeholder="e.g., 3350" oninput="onApvInitialRentInput()">
+            </div>
+            <div>
+              <label>Security Deposit ($) <span class="label-hint">(auto)</span></label>
+              <input type="text" id="apvSecurityDeposit" readonly tabindex="-1" style="background:var(--bg-soft); color:var(--ink-soft); cursor:default;">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>LLC on rent check <span class="label-hint">(auto — from building)</span></label>
+            <input type="text" id="apvLlcDisplay" readonly tabindex="-1" style="background:var(--bg-soft); color:var(--ink-soft); cursor:default;">
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvCheckToggle" onchange="renderPreview()"> <span>Paying by certified check</span></label>
+            <p class="appconf-toggle-hint">Removes the ClickPay wording and adds "certified check payable to…" next to each amount (rent → building LLC, deposit → Harborline Bank).</p>
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvReducedSecurity" onchange="onApvReducedSecurityToggle()"> <span>Approved for reduced security deposit ($2,000)</span></label>
+            <p class="appconf-toggle-hint">When off, the security deposit equals the initial rent payment. When on, it's set to $2,000.</p>
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvIncentiveToggle" onchange="onApvIncentiveToggle(this.checked)"> <span>Include an incentive</span></label>
+            <input type="text" id="apvIncentive" class="appconf-toggle-input" placeholder="e.g., 1 month free (applied to March 2026)" oninput="renderPreview()" style="display:none;">
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvFloorPlanToggle" onchange="onApvFloorPlanToggle(this.checked)"> <span>Include floor plan link</span></label>
+            <p class="appconf-toggle-hint">Pulls from the floor plan spreadsheet by building + unit — works even if the unit isn't on the showsheet. Paste a link manually if there's no match.</p>
+            <input type="text" id="apvFloorPlan" class="appconf-toggle-input" placeholder="https://…  (auto-fills from floor plan file if unit matches)" oninput="renderPreview()" style="display:none;">
+          </div>
+
+          <div class="appconf-toggle-row">
+            <label class="cbx appconf-toggle-label"><input type="checkbox" id="apvAssignmentToggle" onchange="onApvAssignmentToggle(this.checked)"> <span>This is an assignment</span></label>
+            <p class="appconf-toggle-hint">Changes the opening line to "…approved for the assignment of Unit # …".</p>
+            <label class="cbx appconf-toggle-label" id="apvAsIsRow" style="display:none; margin-top:10px;"><input type="checkbox" id="apvAsIsToggle" onchange="renderPreview()"> <span>Delivered as-is</span></label>
+            <p class="appconf-toggle-hint" id="apvAsIsHint" style="display:none;">Adds an italic "Please note this unit is delivered as is." under the sign-lease line in Step 1.</p>
+          </div>
+        </div>
+
+
+        <div class="for-tour-inquiry">
+          <div class="field">
+            <label>Opening Line <span class="label-hint">(auto-fills by template, editable)</span></label>
+            <textarea id="openingLine" rows="2" oninput="renderPreview()">Thank you for touring with us today, it was great meeting you!</textarea>
+            <div class="field-note" id="openingNote" style="display:none;">Replaced by the "no longer available" opening while that box below is ticked.</div>
+          </div>
+
+          <div class="unavailable-row">
+            <label class="cbx"><input type="checkbox" id="unavailableToggle" onchange="toggleUnavailable(this.checked)"> <span>The unit they wanted is no longer available — show alternatives</span></label>
+            <div class="unavailable-fields" id="unavailableFields">
+              <div style="grid-column:1 / -1;">
+                <label>Which unit did they want?</label>
+                <select id="unavailablePick" onchange="onUnavailablePick(this.value)"></select>
+                <label class="cbx" style="margin-top:8px;"><input type="checkbox" id="unavailableManual" onchange="onUnavailableManualToggle(this.checked)"> <span>Unit not listed on showsheet — enter manually</span></label>
+              </div>
+              <div id="unavailManualBldg" style="display:none;">
+                <label>Original Building</label>
+                <input type="text" id="unavailableBuilding" placeholder="e.g., 2050 Tidemark Blvd" oninput="renderPreview()">
+              </div>
+              <div id="unavailManualUnit" style="display:none;">
+                <label>Original Unit #</label>
+                <input type="text" id="unavailableUnit" placeholder="e.g., 1812" oninput="renderPreview()">
+              </div>
+            </div>
+          </div>
+
+          <div class="global-toggles">
+            <label class="cbx"><input type="checkbox" id="incParking" onchange="includeParking=this.checked; renderPreview()"> <span>Add parking info</span></label>
+            <label class="cbx"><input type="checkbox" id="incShuttle" onchange="includeShuttle=this.checked; renderPreview()"> <span>Add shuttle info</span></label>
+          </div>
+        </div>
+
+        </div>
+        <div class="pick-hint" id="pickHint">Select the units for this tour below ↓ &nbsp;then click <strong>Save units to tour</strong> above.</div>
+
+        <div class="for-units">
+
+        <div class="broker-switch"><label class="cbx"><input type="checkbox" id="emailBrokerChk" onchange="setEmailBroker(this.checked)"> <span><strong>Sending to a broker</strong> <span class="label-hint">quotes the OP for every unit; leave off for a prospect with no broker</span></span></label></div>
+
+        <div class="quick-filters" id="quickFilters">
+          <button class="qf-btn active" data-filter="all" onclick="setQuickFilter('all',this)">All</button>
+          <button class="qf-btn" data-filter="studio" onclick="setQuickFilter('studio',this)">Studio</button>
+          <button class="qf-btn" data-filter="1br" onclick="setQuickFilter('1br',this)">1 Bed</button>
+          <button class="qf-btn" data-filter="2br" onclick="setQuickFilter('2br',this)">2 Bed</button>
+          <button class="qf-btn" data-filter="3br" onclick="setQuickFilter('3br',this)">3 Bed</button>
+          <button class="qf-btn" data-filter="priority" onclick="setQuickFilter('priority',this)"><span class="priority-dot"></span>Priority</button>
+          <button class="qf-btn" data-filter="hasfp" onclick="setQuickFilter('hasfp',this)">Has floor plan</button>
+          <button class="qf-btn" data-filter="fits" id="qfFits" style="display:none;" onclick="setQuickFilter('fits',this)" title="Units matching the tour's bedroom sizes and price range">✓ Fits needs</button>
+        </div>
+
+        <div class="search-bar">
+          <input type="text" id="unitSearch" placeholder="Search units, building, type..." aria-label="Search units" oninput="renderUnitList()">
+        </div>
+        <div class="sel-summary" id="selSummary"></div>
+
+        <div id="unitListContainer">
+          <div class="empty">Upload a showsheet to load units</div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; gap:8px;">
+          <button onclick="addCustomUnit()">+ Add custom unit</button>
+          <button class="tiny ghost" onclick="clearSelections()">Clear selections</button>
+        </div>
+
+        <div id="selectedUnits"></div>
+        </div> <!-- /for-units -->
+      </div>
+    </div>
+
+    <div class="panel preview-panel">
+      <div class="panel-header">
+        <h2>Preview &amp; Copy</h2>
+        <div class="row">
+          <button class="tiny" onclick="copyAsPlainText()">Copy plain text</button>
+          <button class="primary tiny" onclick="copyAsHTML()">Copy for Outlook/Gmail</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="preview-dim" id="previewDim">Email preview — available once the tour is finished.</div>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="queue" id="trainingPanel" style="margin-top:28px;">
+    <div class="queue-head" onclick="toggleTraining()">
+      <h2>Training Quiz Results <span class="meta" id="trainingMeta"></span></h2>
+      <div class="row" style="gap:12px; align-items:center;"><button class="tiny ghost" id="trainingLock" style="display:none;" onclick="event.stopPropagation(); lockManager()">Lock</button><button class="tiny ghost panel-toggle" id="trainingToggle" aria-expanded="false" aria-controls="trainingBody" onclick="event.stopPropagation(); toggleTraining()">Show</button></div>
+    </div>
+    <div class="queue-body" id="trainingBody"></div>
+  </div>
+
+  <footer class="site-footer" id="buildStamp">Build v1.21 · If this doesn't match the latest deploy, hard-refresh (Ctrl/Cmd+Shift+R)</footer>
+</div>
+
+<div class="modal-backdrop" id="templateModal">
+  <div class="modal" style="width: min(820px, 94vw);">
+    <div class="panel-header">
+      <h2>Email templates</h2>
+      <button class="tiny ghost" onclick="document.getElementById('templateModal').classList.remove('show')">✕ Close</button>
+    </div>
+    <div class="panel-body">
+      <div class="tpl-tabs" style="flex-wrap:wrap;">
+        <button class="tpl-tab active" onclick="switchTplTab('tour')" id="tplTab-tour">Tour</button>
+        <button class="tpl-tab" onclick="switchTplTab('inquiry')" id="tplTab-inquiry">Inquiry</button>
+        <button class="tpl-tab" onclick="switchTplTab('unavailable')" id="tplTab-unavailable">Unavailable</button>
+        <button class="tpl-tab" onclick="switchTplTab('welcome')" id="tplTab-welcome">Welcome</button>
+        <button class="tpl-tab" onclick="switchTplTab('pfa')" id="tplTab-pfa">PFA</button>
+        <button class="tpl-tab" onclick="switchTplTab('parking')" id="tplTab-parking">Parking</button>
+        <button class="tpl-tab" onclick="switchTplTab('shuttle')" id="tplTab-shuttle">Shuttle</button>
+      </div>
+
+      <!-- Tour template panel -->
+      <div class="tpl-panel" id="tplPanel-tour">
+        <div class="field">
+          <label>Opening Line</label>
+          <textarea id="tplTourOpening" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label>Application Requirements (HTML allowed)</label>
+          <textarea id="tplTourRequirements" rows="10"></textarea>
+        </div>
+        <div class="field-row">
+          <div><label>Apply Link Text</label><input type="text" id="tplTourApplyText"></div>
+          <div><label>Apply URL</label><input type="text" id="tplTourApplyUrl"></div>
+        </div>
+        <div class="field"><label>Closing Line</label><textarea id="tplTourClosing" rows="2"></textarea></div>
+        <div class="field"><label>Signature (HTML allowed)</label><textarea id="tplTourSignature" rows="3"></textarea></div>
+      </div>
+
+      <!-- Inquiry template panel -->
+      <div class="tpl-panel" id="tplPanel-inquiry" style="display:none;">
+        <div class="field">
+          <label>Opening Line</label>
+          <textarea id="tplInquiryOpening" rows="2"></textarea>
+        </div>
+        <div class="field">
+          <label>Closing Block (HTML allowed) — use <code>{primaryBuilding}</code> as placeholder</label>
+          <textarea id="tplInquiryClosing" rows="6"></textarea>
+        </div>
+        <div class="field"><label>Signature (HTML allowed)</label><textarea id="tplInquirySignature" rows="3"></textarea></div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">Inquiry follow-ups don't include application requirements or floor plan links by default.</p>
+      </div>
+
+      <!-- Unavailable opening template -->
+      <div class="tpl-panel" id="tplPanel-unavailable" style="display:none;">
+        <div class="field">
+          <label>Unavailable Opening (HTML allowed) — use <code>{unit}</code> and <code>{building}</code> as placeholders</label>
+          <textarea id="tplUnavailable" rows="4"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">Replaces the standard opening line in Tour or Inquiry mode when "the unit they wanted is no longer available" is checked. The selected units are then sent as alternatives.</p>
+      </div>
+
+      <!-- Welcome panel: 5 buildings -->
+      <div class="tpl-panel" id="tplPanel-welcome" style="display:none;">
+        <div class="field">
+          <label>Edit Building</label>
+          <select id="tplWelcomeBuilding" onchange="loadWelcomeTplForEdit()">
+            <option value="2040">2040 Tidemark Blvd</option>
+            <option value="2050" selected>2050 Tidemark Blvd</option>
+            <option value="2110">2110 Tidemark Blvd</option>
+            <option value="2120">2120 Tidemark Blvd</option>
+            <option value="2230">2230 Tidemark Blvd</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Subject Line</label>
+          <input type="text" id="tplWelcomeSubject">
+        </div>
+        <div class="field">
+          <label>Email Body (HTML allowed)</label>
+          <textarea id="tplWelcomeBody" rows="20"></textarea>
+        </div>
+        <div class="field">
+          <label>COI Reminder Filename</label>
+          <input type="text" id="tplWelcomeCoi" placeholder="e.g., 2050 COI">
+        </div>
+        <div class="field">
+          <label>Signature (HTML allowed)</label>
+          <textarea id="tplWelcomeSignature" rows="3"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">Body uses <code>{name}</code> for prospect first name. Each building edits independently — switch via the dropdown above. Click <strong>Save all templates</strong> at the bottom when done.</p>
+      </div>
+
+      <!-- PFA panel -->
+      <div class="tpl-panel" id="tplPanel-pfa" style="display:none;">
+        <div class="field">
+          <label>PFA Opening (HTML allowed)</label>
+          <textarea id="tplPfaOpening" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label>PFA Body (HTML allowed)</label>
+          <textarea id="tplPfaBody" rows="20"></textarea>
+        </div>
+        <div class="field" style="margin-top:22px; padding-top:16px; border-top:1px solid var(--line);">
+          <label>Step 2 — Signed / Payment Due: Opening (HTML allowed)</label>
+          <textarea id="tplPfaSignedOpening" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label>Step 2 — Signed / Payment Due: Body (HTML allowed)</label>
+          <textarea id="tplPfaSignedBody" rows="12"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); line-height:1.5; margin-top:-6px;">Placeholders for Step 2: <code>{lounge}</code>, <code>{deposit}</code>, <code>{rent}</code>, <code>{signedDate}</code>, <code>{dueDate}</code> (signed date + 7 days). Amounts are inserted without a dollar sign, so keep the <code>$</code> in the template.</p>
+        <div class="field">
+          <label>Signature (HTML allowed — shared by Step 1 &amp; Step 2)</label>
+          <textarea id="tplPfaSignature" rows="3"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">The lounge-disclaimer banner ("only reservable 2nd & 4th weekend") is shown in the tool UI as a reminder to the agent — it's also referenced in the body text below.</p>
+      </div>
+
+      <!-- Parking panel -->
+      <div class="tpl-panel" id="tplPanel-parking" style="display:none;">
+        <div class="field">
+          <label>Parking Info Block (HTML allowed)</label>
+          <textarea id="tplParking" rows="14"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">Appears at the bottom of the email when "Add Parking Info" is checked.</p>
+      </div>
+
+      <!-- Shuttle panel -->
+      <div class="tpl-panel" id="tplPanel-shuttle" style="display:none;">
+        <div class="field">
+          <label>Shuttle Info Block (HTML allowed)</label>
+          <textarea id="tplShuttle" rows="10"></textarea>
+        </div>
+        <p style="font-size:12px; color:var(--ink-soft); font-style:italic;">Appears at the bottom of the email when "Add Shuttle Info" is checked.</p>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; gap:8px; margin-top:8px;"><button class="tiny ghost" onclick="document.getElementById('templateModal').classList.remove('show')">Cancel</button><button class="primary" onclick="saveTemplate()">Save all templates</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="dbxModal">
+  <div class="modal">
+    <div class="panel-header"><h2>Dropbox sync</h2><button class="tiny ghost" onclick="document.getElementById('dbxModal').classList.remove('show')">✕ Close</button></div>
+    <div class="panel-body">
+      <p style="margin:0 0 12px; font-size:13px; color:var(--ink-soft); line-height:1.5;">Paste the shared link for each file (in Dropbox: Share → Copy link, set to "Anyone with the link"). Every Desk checks the files every 5 minutes and publishes to the iPads when one changes. While a link is set, Dropbox is the only source for that file, so its Upload / Publish / Clear buttons are hidden.</p>
+      <div class="field"><label>Showsheet link</label><input type="text" id="dbxSs" placeholder="https://www.dropbox.com/scl/fi/…/Showsheet….xlsx?rlkey=…"><div class="row" style="gap:8px; margin-top:6px; align-items:center;"><button class="tiny" onclick="testDbx('ss')">Test link</button><span id="dbxSsTest" role="status" style="font-size:12px;"></span></div></div>
+      <div class="field"><label>Floor plan master link</label><input type="text" id="dbxFp" placeholder="https://www.dropbox.com/scl/fi/…/Floor_Plan_Master….xlsx?rlkey=…"><div class="row" style="gap:8px; margin-top:6px; align-items:center;"><button class="tiny" onclick="testDbx('fp')">Test link</button><span id="dbxFpTest" role="status" style="font-size:12px;"></span></div></div>
+      <div class="row" style="justify-content:space-between; gap:8px; margin-top:12px;"><button class="tiny danger" id="dbxOffBtn" onclick="turnOffDbx()" title="Go back to uploading the showsheet and floor plans by hand">Turn off sync</button><span class="row" style="gap:8px;"><button class="tiny ghost" onclick="document.getElementById('dbxModal').classList.remove('show')">Cancel</button><button class="tiny primary" onclick="saveDbxSettings()">Save</button></span></div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="planModal">
+  <div class="modal">
+    <div class="panel-header">
+      <h2 id="planTitle">Plan a tour</h2>
+      <button class="tiny ghost" onclick="document.getElementById('planModal').classList.remove('show')">✕ Close</button>
+    </div>
+    <div class="panel-body">
+      <div class="mode-switcher row-top" id="planKindRow" style="margin-bottom:12px;">
+        <button class="mode-btn active" id="planKindTour" onclick="setPlanKind('tour')"><small>Prospect</small>Tour</button>
+        <button class="mode-btn" id="planKindInsp" onclick="setPlanKind('inspection')"><small>Resident</small>Inspection</button>
+      </div>
+      <p style="margin:0 0 12px; font-size:13px; color:var(--ink-soft);" id="planUnitsNote"></p>
+      <div class="field-row">
+        <div><label for="planFirst"><span id="planProspectLabel">Prospect first name</span> <span class="req-star" aria-hidden="true">*</span></label><input type="text" id="planFirst" placeholder="e.g., Karen" required aria-required="true"></div>
+        <div><label>Last initial</label><input type="text" id="planProspect" placeholder="e.g., M" maxlength="2" style="max-width:90px;"></div>
+        <div><label>Email <span class="label-hint">(optional — for the 10-minute heads-up)</span></label><input type="email" id="planEmail" placeholder="karen@example.com"></div>
+        <div><label>Leasing Assistant</label><select id="planAssistant"></select></div>
+      </div>
+      <div class="field-row" id="planInspRow" style="display:none;">
+        <div><label>Building</label><select id="planInspBldg"><option value="2050 TIDEMARK BLVD">2050 Tidemark Blvd</option><option value="2230 TIDEMARK BLVD">2230 Tidemark Blvd</option><option value="2120 TIDEMARK BLVD">2120 Tidemark Blvd</option><option value="2040 TIDEMARK BLVD">2040 Tidemark Blvd</option><option value="2110 TIDEMARK BLVD">2110 Tidemark Blvd</option></select></div>
+        <div><label>Unit #</label><input type="text" id="planInspUnit" placeholder="e.g., 1812"></div>
+      </div>
+      <div id="planTourFields">
+      <div class="field-row">
+        <div><label class="cbx"><input type="checkbox" id="planBroker" onchange="document.getElementById('planBrokerRow').style.display=this.checked?'':'none'"> <span>Touring with a broker</span></label></div>
+      </div>
+      <div class="field-row" id="planBrokerRow" style="display:none;">
+        <div><label>Broker last name <span class="req-star" aria-hidden="true">*</span></label><input type="text" id="planBrokerLast"></div>
+        <div><label>Broker first name <span class="label-hint">(optional)</span></label><input type="text" id="planBrokerFirst"></div>
+      </div>
+      <div class="field" style="margin-top:6px;"><label id="planBedsLabel">Looking for <span class="label-hint">(pick all that apply)</span></label><div id="planBeds" class="row" role="group" aria-labelledby="planBedsLabel" style="gap:6px; flex-wrap:wrap;"></div></div>
+      <div class="field-row">
+        <div><label>Price range ($/mo)</label><div class="row" style="gap:6px;"><input type="text" id="planMin" placeholder="Min" aria-label="Minimum price" inputmode="numeric"><span style="color:var(--ink-soft);">–</span><input type="text" id="planMax" placeholder="Max" aria-label="Maximum price" inputmode="numeric"></div></div>
+        <div><label>Move-in date</label><div class="row" style="gap:10px; align-items:center;"><input type="date" id="planMoveIn" style="flex:1;"><label class="cbx" style="white-space:nowrap;"><input type="checkbox" id="planFlex"> <span>Flexible</span></label></div></div>
+      </div>
+      <div class="field"><label>Must-haves / notes</label><textarea id="planNotes" placeholder="e.g., needs W/D in unit, wants a balcony, has a large dog" style="min-height:60px;"></textarea></div>
+      </div>
+      <div class="row" style="justify-content:space-between; gap:8px; margin-top:16px;">
+        <button class="tiny ghost" onclick="document.getElementById('planModal').classList.remove('show')">Cancel</button>
+        <span class="row" style="gap:8px;">
+          <button class="tiny" id="planStartNow" onclick="submitPlanTour(false, true)" title="Requires an assistant (and, for a tour, selected units)">Start tour now</button>
+          <button class="tiny" id="planSubmitPick" onclick="submitPlanTour(true)" title="Sends it to the queue, then lets you pick the units in the Email Builder">Send &amp; pick units</button>
+          <button class="tiny primary" id="planSubmit" onclick="submitPlanTour(false)">Send to queue</button>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="helpModal">
+  <div class="modal">
+    <div class="panel-header">
+      <h2>How the Leasing Desk works</h2>
+      <button class="tiny ghost" onclick="document.getElementById('helpModal').classList.remove('show')">✕ Close</button>
+    </div>
+    <div class="panel-body" style="font-size:13px; line-height:1.6;">
+      <p style="margin-bottom:8px;"><strong>Showsheet &amp; floor plans</strong></p>
+      <p style="margin-bottom:14px;">With Dropbox sync on, every Desk reads the showsheet and floor plan master from Dropbox and publishes them to the iPads when a file changes — edit the file in Dropbox, reload it there, then click <strong>Sync now</strong>. With sync off, use <strong>Upload .xlsx</strong> and <strong>Publish to iPads</strong>. A showsheet more than a day old is flagged on the card.</p>
+      <p style="margin-bottom:8px;"><strong>Tour Queue</strong></p>
+      <ul style="padding-left:20px; margin-bottom:14px;">
+        <li><strong>Current Queue</strong> — who's waiting (with a wait estimate) and who's on a tour. Start and Finish tours here or on the iPads.</li>
+        <li><strong>Follow-Ups to Send</strong> — finished tours; mark sent once the email is out.</li>
+        <li><strong>Leasing Manager Check-In</strong> — the second touch, due the day after the follow-up.</li>
+        <li><strong>Future Move-Ins</strong> — prospects who came in early; follow up 30 days before move-in.</li>
+        <li><strong>Rotation</strong> and <strong>History</strong> — who's next, who's out, and everything shown in the last weeks (with Undo).</li>
+      </ul>
+      <p style="margin-bottom:8px;"><strong>Email Builder — six templates</strong></p>
+      <ul style="padding-left:20px; margin-bottom:14px;">
+        <li><strong>Tour Follow-Up</strong> and <strong>Inquiry Follow-Up</strong> — pick units from the list; each opens an editor for rent, concession, floor plan and a note. "No longer available" swaps in an apology and offers the selected units as alternatives.</li>
+        <li><strong>Welcome Email</strong> — pick the building, copy the subject line; attach the COI.</li>
+        <li><strong>PFA</strong> — Rental Info (lounges reservable on the 2nd &amp; 4th weekend) or Payment Due (checks due 7 days after signing).</li>
+        <li><strong>Application Confirmation</strong> and <strong>Lease Approval</strong> — fill the fields; the floor plan link follows the building and unit.</li>
+      </ul>
+      <p style="margin-bottom:14px;">Then <strong>Copy for Outlook/Gmail</strong> and paste into a new email. If the email still has a blank like [Prospect], the Desk says so after copying.</p>
+      <p style="margin-bottom:8px;"><strong>Templates</strong></p>
+      <p>Under <strong>Edit email templates</strong> you can change the Tour, Inquiry, Welcome and PFA emails, the "no longer available" opening, and the parking and shuttle blocks; changes are saved in this browser. Application Confirmation and Lease Approval aren't templates: they're built from their fields each time.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" title="Click to dismiss"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     GUIDED TOUR OVERLAY
+     ═══════════════════════════════════════════════════════════ -->
+<div id="tourOverlay">
+  <svg id="tourSvg" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <mask id="tourMask">
+        <rect width="10000" height="10000" fill="white"/>
+        <rect id="tourCutout" rx="3" fill="black" x="0" y="0" width="0" height="0"/>
+      </mask>
+    </defs>
+    <rect width="10000" height="10000" fill="rgba(18,14,10,0.74)" mask="url(#tourMask)"/>
+    <rect id="tourHighlightRect" rx="3" x="0" y="0" width="0" height="0"/>
+  </svg>
+
+  <div id="tourCard" class="tour-hidden">
+    <div class="tour-card-header">
+      <div>
+        <div class="tour-card-eyebrow" id="tourEyebrow">Step 1 of 7</div>
+        <div class="tour-card-title" id="tourTitle">Welcome</div>
+      </div>
+      <button class="tour-close-x" onclick="endTour()" title="Skip tour" aria-label="Skip tour">✕</button>
+    </div>
+    <div class="tour-card-body" id="tourBody"></div>
+    <div class="tour-card-footer">
+      <div class="tour-progress" id="tourDots"></div>
+      <div class="tour-nav">
+        <button class="tour-btn-prev" id="tourPrev" onclick="tourStep(-1)">← Back</button>
+        <button class="tour-btn-next" id="tourNext" onclick="tourStep(1)">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

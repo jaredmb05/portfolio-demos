@@ -1,0 +1,9 @@
+# Open items
+
+Engineering work that is deliberately left for after launch. Product features live in `BACKLOG.md`; fixes production also needs live in `PRODUCTION_PORT.md`.
+
+## Post-launch
+1. **Inline handlers → delegated listeners.** The HTML still calls about 290 functions by name from `on*` attributes (in `index.html` and in markup the render functions build), so each app's `main.js` puts those functions on `window`, plus accessors for the 11 variables handlers assign (D18). Replace them with `data-action` attributes and one delegated listener per app, then delete the `window` bridge. Needs the browser flows and the email byte-compare as the safety net; no behavior change intended.
+2. **"¼" and "¾" in incentive text.** The iPad reads "½" as "1/2" (M2), but not "¼" or "¾": "¾ Month Free" on a unit with no showsheet net effective quotes the full rent. Both characters appear in the apps' own override menus. Extending the M2 rule is one line in `parseIncentive` plus tests; left out of the cleanup because the owner's ruling named only "½".
+3. **Production-only, not ported (v1.22–v1.23 tour times, iPad start-time question, Firestore rules test).** Production added tour times on the Rotation tab (live minutes, "took N min", weekly and daily typical length, Leave out / Count it again), the iPad's "Did this tour start earlier?" question at Finish, and a Firestore emulator test for `firestore.rules`. The owner kept the demo at production v1.21 / iPad v1.19 plus this repo's fixes; these stay in production.
+4. **SheetJS 0.18.5 has known advisories** (prototype pollution and a ReDoS when reading crafted files). It is the version production loads from cdnjs, now bundled here (`apps/shared/vendor/`) so the apps and the demo need no CDN. Fixed releases are published only on SheetJS's own CDN, not npm or cdnjs; upgrading is a change to the showsheet reader, so it needs the parser tests and the Desk flows.

@@ -1,0 +1,14 @@
+{
+  "name": "leasing-desk",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:flows": "bash tests/future_flows.sh && bash tests/desk_flows.sh && bash tests/ipad_flows.sh",
+    "test:demo": "bash tests/demo_check.sh"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11",
+    "xlsx": "^0.18.5"
+  }
+}

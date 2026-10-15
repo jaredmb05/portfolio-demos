@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Tour Companion (iPad) app: anyone can read the current showsheet; the Desk (no login) can publish.
+    match /showsheet/current {
+      allow read: if true;
+      allow write: if request.resource.data.units is list
+                   && request.resource.data.publishedAtIso is string
+                   && request.resource.data.units.size() < 2000;
+    }
+    match /showsheet_history/{doc} {
+      allow read: if true;
+      allow create: if request.resource.data.units is list;
+      allow update, delete: if false;
+    }
+    // Tours shared between the iPads and the Desk
+    match /tours/{doc} {
+      allow read: if true;
+      allow create, update: if request.resource.data.stops is list
+                            && request.resource.data.assistant is string
+                            && request.resource.data.updatedAtIso is string
+                            && request.resource.data.stops.size() <= 40;
+      allow delete: if true;
+    }
+    match /settings/assistants {
+      allow read: if true;
+      allow write: if request.resource.data.names is list && request.resource.data.names.size() <= 50;
+    }
+    match /settings/availability {
+      allow read: if true;
+      allow write: if request.resource.data.byDate is map;
+    }
+    match /settings/schedule {
+      allow read: if true;
+      allow write: if request.resource.data.byName is map;
+    }
+    match /settings/appointments {
+      allow read: if true;
+      allow write: if request.resource.data.byDate is map;
+    }
+    match /settings/dropboxSync {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(['showsheetUrl'])
+                   || request.resource.data.lastCheckIso is string;
+    }
+    // Future Move-Ins (no contact info stored)
+    match /future_leads/{doc} {
+      allow read: if true;
+      allow create, update: if request.resource.data.name is string
+                            && request.resource.data.moveIn is string
+                            && request.resource.data.followUpDate is string;
+      allow delete: if true;
+    }
+    match /quiz_results/{doc} {
+      allow read: if true;
+      allow create: if request.resource.data.name is string && request.resource.data.score is number;
+      allow update, delete: if false;
+    }
+    // Everything else (another app's data) requires sign-in
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

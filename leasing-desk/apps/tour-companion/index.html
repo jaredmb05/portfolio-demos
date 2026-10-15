@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tour Companion">
+<meta name="theme-color" content="#5a3a5c">
+<title>Tour Companion</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="../shared/fonts/fonts.css">
+<script src="../shared/boot.js"></script><!-- config + Firebase, or the in-browser demo with ?demo -->
+<link rel="stylesheet" href="../shared/tokens.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="hdr-row">
+    <h1>Availability</h1>
+    <div class="live"><span class="dot wait" id="dot"></span><span id="liveText">Connecting…</span></div>
+  </div>
+  <div class="banner" id="banner" role="status" aria-live="polite"></div>
+</header>
+
+<div class="page on" id="pageList">
+  <div class="toolbar">
+    <input class="search" id="search" type="search" placeholder="Search unit, view, building…" aria-label="Search units" autocomplete="off" oninput="render()">
+    <div class="chips" id="chips"></div>
+  </div>
+  <main id="list"><div class="empty">Waiting for the showsheet…</div></main>
+</div>
+
+<div class="page" id="pageMore">
+  <div class="sheet" id="moreMenu">
+    <p class="lead" style="margin-bottom:12px;">Tools and training.</p>
+    <div class="more-list">
+      <button class="more-item" onclick="moreOpen('calc')"><span>Net Rent Calculator</span><small>Net effective rent for any rent, term, and concession</small></button>
+      <button class="more-item" onclick="moreOpen('cheat')"><span>Building Cheat Sheet</span><small>Opened, units, amenities by floor, staff, talking points</small></button>
+      <button class="more-item" onclick="moreOpen('quiz')"><span>Training Quiz</span><small>30 questions · 80% to pass · results are recorded</small></button>
+    </div>
+  </div>
+
+  <div id="moreCheat" style="display:none;">
+    <button class="back-link" onclick="moreBack()">‹ More</button>
+    <div id="cheatBody"></div>
+  </div>
+
+  <div id="moreQuiz" style="display:none;">
+    <button class="back-link" id="quizBack" onclick="moreBack()">‹ More</button>
+    <div class="sheet" id="quizIntro">
+      <p class="lead">30 questions on applications, buildings, policies, transit, who does what, and quoting. 80% to pass. Once you begin, the rest of the app is locked until you finish; only a manager's PIN can exit early.</p>
+      <div class="f"><label>Your name</label><select id="quizNameSel" onchange="document.getElementById('quizNameOther').style.display = this.value === '__other__' ? '' : 'none'"></select>
+        <input id="quizNameOther" placeholder="Type your name" autocomplete="off" style="display:none; margin-top:8px;"></div>
+      <div class="tour-actions"><button class="btn" onclick="startQuiz()">Begin</button><span class="savemsg" id="quizMsg"></span></div>
+    </div>
+    <div id="quizRun" style="display:none;">
+      <div class="sheet">
+        <div class="qtop"><span id="quizProgress"></span><span class="qcat" id="quizCat"></span></div>
+        <div class="qbar"><div id="quizBar"></div></div>
+        <div class="qq" id="quizQ"></div>
+        <div class="qopts" id="quizOpts"></div>
+        <button class="btn quiet" onclick="quitQuiz()" style="margin-top:14px;">Exit quiz (PIN required)</button>
+      </div>
+    </div>
+    <div id="quizResult" style="display:none;">
+      <div class="sheet">
+        <h2>Your result</h2>
+        <div id="quizScore" class="result"></div>
+        <p class="lead" id="quizSaved" style="margin-top:10px;"></p>
+        <div id="quizMissed" class="req"></div>
+        <div class="tour-actions"><button class="btn sec" onclick="resetQuiz()">Done</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="moreCalc" style="display:none;">
+  <button class="back-link" onclick="moreBack()">‹ More</button>
+  <div class="sheet">
+    <p class="lead">Net effective rent is the monthly rent averaged over the lease term after the concession. The concession itself is applied up front — except at 2110, where it's applied to the last month of the lease.</p>
+    <div class="grid2">
+      <div class="f"><label>Monthly rent</label><input id="cRent" type="text" inputmode="decimal" placeholder="4,395" oninput="calc()"></div>
+      <div class="f"><label>Lease term (months)</label><input id="cTerm" type="text" inputmode="numeric" value="12" oninput="calc()"></div>
+      <div class="f"><label>Free months</label>
+        <select id="cFree" onchange="calc()">
+          <option value="0">None</option><option value="0.25">¼ month</option><option value="0.5">½ month</option><option value="0.75">¾ month</option><option value="1" selected>1 month</option><option value="1.5">1½ months</option><option value="2">2 months</option>
+        </select></div>
+      <div class="f"><label>One-time credit ($)</label><input id="cCredit" type="text" inputmode="decimal" placeholder="0" oninput="calc()"></div>
+    </div>
+    <div class="result"><div><div class="lbl">Net effective rent</div><div class="big" id="cNet">—</div></div><div class="lbl" id="cNetSub"></div></div>
+    <div class="result-rows" id="cRows"></div>
+  </div>
+  </div>
+  <div class="footer" id="footerMore"></div>
+</div>
+
+<div class="page" id="pageTour">
+  <!-- Home: start or resume -->
+  <div id="tourHome">
+    <div class="home-note" id="homeNote" role="status" aria-live="polite"></div>
+    <div class="tour-top">
+      <div class="tour-actions" style="margin-top:0;">
+        <button class="btn" onclick="newEntry('tour')">New tour</button>
+        <button class="btn sec" onclick="newEntry('inspection')">New inspection</button>
+        <span class="t2" style="flex:1 1 220px;">Everything saves as you go; the Leasing Desk picks it up for the follow-up email.</span>
+      </div>
+    </div>
+    <div class="tour-top">
+      <div class="qhead"><h2>Today's tours</h2></div>
+      <div class="tourlist" id="tourList"></div>
+    </div>
+  </div>
+
+  <!-- Active tour -->
+  <div id="tourActive" style="display:none;">
+    <div class="tour-top" id="guestBar" style="display:none; cursor:pointer;" onclick="toggleGuest(true)">
+      <div class="qhead" style="margin:0;"><div style="min-width:0;"><div class="t1" id="guestBarTitle"></div><div class="t2" id="guestBarSub"></div></div><button class="edit-link" type="button" onclick="event.stopPropagation(); toggleGuest(true)" aria-label="Edit tour details">Edit <span aria-hidden="true">&#9662;</span></button></div>
+    </div>
+    <div class="tour-top" id="guestCard">
+      <h2 id="guestTitle" style="font-size:18px; color:var(--accent); margin-bottom:10px;">New tour</h2>
+      <div class="grid2">
+        <div class="f"><label>Leasing assistant</label><select id="tAssistant" onchange="onAssistantSelect(this.value)"></select></div>
+        <div class="f"><label id="prospectLabel">Prospect first name</label><input id="tFirst" placeholder="e.g., Karen" autocomplete="off" oninput="tourChanged()"></div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div class="f"><label>Last initial</label><input id="tProspect" placeholder="e.g., M" maxlength="2" autocomplete="off" oninput="tourChanged()" style="max-width:120px;"></div>
+        <div class="f" id="emailField"><label>Email <span style="font-weight:400; text-transform:none;">(optional — for the 10-minute heads-up)</span></label><input id="tEmail" type="email" placeholder="karen@example.com" autocomplete="off" oninput="tourChanged()"></div>
+      </div>
+      <div id="insFields" style="display:none;">
+        <div class="grid2" style="margin-top:10px;">
+          <div class="f"><label>Building</label><select id="insBldg" onchange="tourChanged()"><option value="2050 TIDEMARK BLVD">2050 Tidemark Blvd</option><option value="2230 TIDEMARK BLVD">2230 Tidemark Blvd</option><option value="2120 TIDEMARK BLVD">2120 Tidemark Blvd</option><option value="2040 TIDEMARK BLVD">2040 Tidemark Blvd</option><option value="2110 TIDEMARK BLVD">2110 Tidemark Blvd</option></select></div>
+          <div class="f"><label>Unit #</label><input id="insUnit" placeholder="e.g., 1812" autocomplete="off" oninput="tourChanged()"></div>
+        </div>
+      </div>
+      <label class="toggle" id="brokerToggleRow"><input type="checkbox" id="tBroker" onchange="tourChanged(true)"> Touring with a broker</label>
+      <div id="brokerFields" style="display:none;">
+        <div class="grid2" style="margin-top:10px;">
+          <div class="f"><label>Broker last name</label><input id="tBrokerLast" placeholder="Required" autocomplete="off" oninput="tourChanged()"></div>
+          <div class="f"><label>Broker first name (optional)</label><input id="tBrokerFirst" autocomplete="off" oninput="tourChanged()"></div>
+        </div>
+        <div class="disclaimer" id="brokerNote"></div>
+      </div>
+      <div id="assistantManage" style="display:none; margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg);">
+        <div class="t2" style="margin-bottom:6px;">Leasing assistants (shared across all iPads and the Leasing Desk)</div>
+        <div id="assistantList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;"></div>
+        <div style="display:flex; gap:8px;"><input id="assistantNew" class="search" placeholder="Add a name" style="flex:1; padding:9px 12px;"><button class="btn sec" onclick="addAssistant()">Add</button><button class="btn quiet" onclick="managerUnlocked = false; toggleAssistantManage(false)">Done &amp; lock</button></div>
+      </div>
+      <div id="needsBlock" style="margin-top:12px; border-top:1px solid var(--line-soft); padding-top:12px;">
+        <div class="f"><label id="needBedsLabel">Looking for</label><div class="chips" id="needBeds" role="group" aria-labelledby="needBedsLabel" style="margin-top:0;"></div></div>
+        <div class="grid2" style="margin-top:10px;">
+          <div class="f"><label>Price range ($/mo)</label><div style="display:flex; gap:8px; align-items:center;"><input id="needMin" inputmode="numeric" placeholder="Min" aria-label="Minimum price" oninput="tourChanged()"><span style="color:var(--ink-soft);">–</span><input id="needMax" inputmode="numeric" placeholder="Max" aria-label="Maximum price" oninput="tourChanged()"></div></div>
+          <div class="f"><label>Move-in date</label><div style="display:flex; gap:10px; align-items:center;"><input id="needMoveIn" type="date" oninput="tourChanged()" style="flex:1;"><label class="toggle" style="font-size:14px; white-space:nowrap;"><input type="checkbox" id="needFlex" onchange="tourChanged()"> Flexible</label></div></div>
+        </div>
+        <div class="f" style="margin-top:10px;"><label>Must-haves / notes</label><input id="needNotes" placeholder="e.g., W/D in unit, balcony, large dog" oninput="tourChanged()"></div>
+      </div>
+      <div class="times" id="tTimes"></div>
+      <div class="tour-actions" id="guestDoneRow"><button class="btn sec" id="guestDoneBtn" onclick="toggleGuest(false)">Done — pick units ↓</button></div>
+    </div>
+
+    <div id="tourSummary" style="display:none;"></div>
+    <div id="tourWorkArea">
+    <details class="tp" id="pickerBox" open>
+      <summary>Units for this tour <span class="t2" id="pickerCount"></span></summary>
+      <div class="body" style="padding-top:8px;">
+        <input class="search" id="pickSearch" type="search" placeholder="Search unit, building, view…" aria-label="Search units for this tour" autocomplete="off" oninput="renderPicker()">
+        <div class="chips" id="pickChips"></div>
+        <div id="pickerList"></div>
+        <div style="margin-top:12px; border-top:1px solid var(--line-soft); padding-top:12px;">
+          <button class="btn sec" id="customBtn" onclick="toggleCustomForm()">Add a unit not on the showsheet</button>
+          <div id="customForm" style="display:none; margin-top:10px;">
+            <div class="grid2">
+              <div class="f"><label>Building</label><select id="cuBldg"><option value="2050 TIDEMARK BLVD">2050 Tidemark Blvd</option><option value="2230 TIDEMARK BLVD">2230 Tidemark Blvd</option><option value="2120 TIDEMARK BLVD">2120 Tidemark Blvd</option><option value="2040 TIDEMARK BLVD">2040 Tidemark Blvd</option><option value="2110 TIDEMARK BLVD">2110 Tidemark Blvd</option></select></div>
+              <div class="f"><label>Unit #</label><input id="cuUnit" placeholder="e.g., 1812" autocomplete="off"></div>
+              <div class="f"><label>Type</label><select id="cuType"></select></div>
+              <div class="f"><label>Monthly rent</label><input id="cuRent" inputmode="decimal" placeholder="e.g., 4395"></div>
+              <div class="f"><label>Sq ft (optional)</label><input id="cuSqft" inputmode="numeric"></div>
+              <div class="f"><label>View (optional)</label><select id="cuView"></select></div>
+              <div class="f" style="grid-column:1 / -1;"><label>Showsheet-style concession (optional)</label><input id="cuInc" placeholder="e.g., 1/2 month free or 1 Mo. OP"></div>
+            </div>
+            <div class="tour-actions"><button class="btn" onclick="addCustomStop()">Add to tour</button><button class="btn quiet" onclick="toggleCustomForm()">Cancel</button><span class="savemsg" id="cuMsg"></span></div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    </div>
+    <div id="tourExtras">
+      <div id="tourBuildings"></div>
+      <details class="tp" id="talkingPointsBox"><summary>Talking points</summary><div class="body" id="talkingPoints"></div></details>
+    </div>
+
+    <div class="tour-top" id="tourFooter">
+      <div class="take-row" id="takeRow" style="display:none;"></div>
+      <div class="take-row" id="undoBar" role="status" aria-live="polite" style="display:none;"></div>
+      <div class="tour-actions" style="margin-top:0;">
+        <button class="btn" id="tStart" onclick="startTour()">Start tour</button>
+        <button class="btn sec" id="tQueue" onclick="sendToQueue()">Send to queue</button>
+        <button class="btn" id="tFinish" onclick="finishTour()" style="display:none;">Finish tour</button>
+        <button class="btn sec" id="tEdit" onclick="editTour()" style="display:none;">Edit units</button>
+        <button class="btn quiet" onclick="closeTour()">Back to tours</button>
+        <span class="savemsg" id="tSaveMsg" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="pageReq">
+  <div class="sheet req">
+    <h2>Application requirements</h2>
+    <p class="lead">What every applicant needs, then the documents by applicant type.</p>
+    <ul id="reqRules"></ul>
+    <h3>Documents to upload</h3>
+    <div class="pill-row">
+      <button class="pill-btn on" aria-pressed="true" onclick="showDoc('w2', this)">Employed (W-2)</button>
+      <button class="pill-btn" aria-pressed="false" onclick="showDoc('self', this)">Self-employed</button>
+      <button class="pill-btn" aria-pressed="false" onclick="showDoc('student', this)">Student</button>
+    </div>
+    <div class="doc on" id="doc-w2"><ul>
+      <li>Three most recent paystubs, or an offer letter if starting a new job</li>
+      <li>Most recent bank statement for the payroll account</li>
+      <li>Landlord reference letter</li>
+      <li>Photo ID</li>
+      <li>Pet photo (if applicable)</li>
+    </ul></div>
+    <div class="doc" id="doc-self"><ul id="selfList"></ul></div>
+    <div class="doc" id="doc-student"><ul>
+      <li>Current school schedule</li>
+      <li>I-20</li>
+      <li>Most recent bank statement</li>
+      <li>Landlord reference letter</li>
+      <li>Passport</li>
+      <li>Pet photo (if applicable)</li>
+    </ul></div>
+    <p class="note">Uploaded documents must be original PDFs with all pages, unedited. Screenshots are not accepted.</p>
+    <h3>Apply</h3>
+    <p style="margin:0;">apply.example.com — after submitting, applicants receive a Vero link by email and must click Submit once Vero is complete.</p>
+  </div>
+  <div class="footer" id="footer"></div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<nav>
+  <button class="on" id="tab-list" aria-current="page" onclick="go('list')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16"/></svg>Availability</button>
+  <button id="tab-tour" onclick="go('tour')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="17" r="3"/><path d="M18 14v3l2 1"/></svg>Tour Planner</button>
+  <button id="tab-req" onclick="go('req')"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6"/></svg>Requirements</button>
+  <button id="tab-more" onclick="go('more')"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</button>
+</nav>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
