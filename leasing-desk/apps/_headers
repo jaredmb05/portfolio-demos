@@ -1,0 +1,7 @@
+/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+/tour-companion/sw.js
+  Cache-Control: no-cache
